@@ -1,45 +1,45 @@
 # Student Innovation Trust DApp - Polygon zkEVM Deployment Guide
 
 ## Overview
-This guide provides comprehensive instructions for deploying the Student Innovation Trust platform as a fully functional Web3 DApp on Polygon zkEVM.
+This guide provides comprehensive instructions for deploying the Student Innovation Trust platform as a fully functional Web3 DApp on the Polygon zkEVM Cardona Testnet. Following these steps will ensure your environment is correctly configured.
 
 ## Architecture Overview
 
 ### Smart Contracts
-1. **COSTToken.sol** - ERC20 token for platform transactions
-2. **ProjectEscrow.sol** - Handles project funding, milestones, and escrow
+1.  **COSTToken.sol** - ERC20 token for platform transactions (Symbol: COST).
+2.  **ProjectEscrow.sol** - Handles project funding, milestones, and escrow.
 
 ### Frontend
 - React + TypeScript application
-- Web3 integration with ethers.js
-- Responsive UI with Tailwind CSS
-
-### Backend
-- Node.js/Express API server
-- MongoDB for off-chain data
 - Web3 integration for blockchain interactions
 
 ## Prerequisites
 
-### Development Environment
-- Node.js v18+ 
-- npm or yarn
-- Git
-- MetaMask wallet
+### 1. Install Dependencies
+Ensure you have Node.js v18+ installed. Then, install the project dependencies:
+```bash
+npm install
+```
 
-### Accounts & Services
-- Polygon zkEVM testnet ETH (for gas fees)
-- MongoDB database (local or cloud)
-- Optional: Infura/Alchemy API key
+### 2. Get a Polygon zkEVM Testnet Wallet
+- Install a browser wallet like MetaMask.
+- Add the Polygon zkEVM Cardona Testnet:
+  - **Network Name**: Polygon zkEVM Cardona Testnet
+  - **RPC URL**: https://rpc.cardona.zkevm-rpc.com
+  - **Chain ID**: 2442
+  - **Currency Symbol**: ETH
+  - **Block Explorer**: https://cardona-zkevm.polygonscan.com/
+
+### 3. Get Testnet ETH
+You'll need testnet ETH on Cardona to pay for gas fees.
+- Visit the official Polygon Faucet: https://faucet.polygon.technology/
+- Select "Polygon zkEVM Cardona" and enter your wallet address to request funds.
 
 ## Smart Contract Deployment
 
-### 1. Environment Setup
+### Step 1: Configure Environment
+Create a `.env` file in the project root by copying the example file:
 ```bash
-# Install dependencies
-npm install
-
-# Configure environment
 cp .env.example .env
 ```
 
