@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
   WalletIcon,
@@ -8,12 +8,35 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   CreditCardIcon,
-  BanknotesIcon
+  BanknotesIcon,
+  ExclamationCircleIcon
 } from '@heroicons/react/24/outline';
 import GlassCard from '../components/GlassCard';
+import { 
+  connectWallet, 
+  isMetaMaskInstalled, 
+  getCurrentAccount, 
+  getCurrentNetwork,
+  switchToPolygonZkEVM,
+  switchToPolygonZkEVMTestnet,
+  onAccountsChanged,
+  onChainChanged,
+  removeAllListeners,
+  getNetworkName,
+  formatAddress,
+  saveWalletConnection,
+  wasWalletConnected,
+  getSavedWalletAddress,
+  isConnectedToSupportedNetwork
+} from '../utils/web3';
 
 const Wallet = () => {
   const [isConnected, setIsConnected] = useState(false);
+  const [walletAddress, setWalletAddress] = useState<string>('');
+  const [currentNetwork, setCurrentNetwork] = useState<number | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [connectionError, setConnectionError] = useState<string>('');
+  const [showNetworkModal, setShowNetworkModal] = useState(false);
   const [showBuyModal, setShowBuyModal] = useState(false);
   const [showSellModal, setShowSellModal] = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
@@ -71,8 +94,130 @@ const Wallet = () => {
     }
   ];
 
-  const handleConnectWallet = () => {
-    setIsConnected(true);
+  // Check for existing wallet connection on component mount
+  useEffect(() => {
+    const checkExistingConnection = async () => {
+      if (wasWalletConnected()) {
+        const account = await getCurrentAccount();
+        if (account) {
+          setWalletAddress(account);
+          setIsConnected(true);
+          const network = await getCurrentNetwork();
+          setCurrentNetwork(network);
+        }
+      }
+    };
+
+    checkExistingConnection();
+
+    // Set up event listeners for wallet changes
+    onAccountsChanged((accounts: string[]) => {
+      if (accounts.length === 0) {
+        handleDisconnectWallet();
+      } else {
+        setWalletAddress(accounts[0]);
+        saveWalletConnection(accounts[0]);
+      }
+    });
+
+    onChainChanged((chainId: string) => {
+      const networkId = parseInt(chainId, 16);
+      setCurrentNetwork(networkId);
+    });
+
+    return () => {
+      removeAllListeners();
+    };
+  }, []);
+
+  const handleConnectWallet = async () => {
+    setIsConnecting(true);
+    setConnectionError('');
+
+    try {
+      // Check if MetaMask or compatible wallet is installed
+      if (!isMetaMaskInstalled()) {
+        throw new Error('MetaMask or compatible wallet (like Trust Wallet) is not installed. Please install a Web3 wallet to continue.');
+      }
+
+      // Connect to wallet
+      const connection = await connectWallet();
+      
+      // Check if connected to supported network
+      const supportedNetwork = await isConnectedToSupportedNetwork();
+      if (!supportedNetwork) {
+        setShowNetworkModal(true);
+        setIsConnecting(false);
+        return;
+      }
+
+      // Set connection state
+      setWalletAddress(connection.address);
+      setCurrentNetwork(connection.chainId);
+      setIsConnected(true);
+      
+      // Save connection state
+      saveWalletConnection(connection.address);
+
+    } catch (error: any) {
+      console.error('Wallet connection error:', error);
+      setConnectionError(error.message || 'Failed to connect wallet');
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  const handleDisconnectWallet = () => {
+    setIsConnected(false);
+    setWalletAddress('');
+    setCurrentNetwork(null);
+    setConnectionError('');
+    localStorage.removeItem('walletConnected');
+    localStorage.removeItem('walletAddress');
+  };
+
+  const handleSwitchNetwork = async (networkType: 'mainnet' | 'testnet') => {
+    try {
+      if (networkType === 'mainnet') {
+        await switchToPolygonZkEVM();
+      } else {
+        await switchToPolygonZkEVMTestnet();
+      }
+      
+      // Check connection after network switch
+      const network = await getCurrentNetwork();
+      setCurrentNetwork(network);
+      setShowNetworkModal(false);
+      
+      // Complete wallet connection
+      const account = await getCurrentAccount();
+      if (account) {
+        setWalletAddress(account);
+        setIsConnected(true);
+        saveWalletConnection(account);
+      }
+    } catch (error: any) {
+      console.error('Network switch error:', error);
+      setConnectionError(error.message || 'Failed to switch network');
+    }
+  };
+
+  const detectWalletType = (): string => {
+    if (typeof window !== 'undefined' && window.ethereum) {
+      if (window.ethereum.isMetaMask) {
+        return 'MetaMask';
+      }
+      // Trust Wallet also sets isMetaMask to true, but has additional properties
+      if (window.ethereum.isTrust) {
+        return 'Trust Wallet';
+      }
+      // Check for other wallet indicators
+      if (window.ethereum.isCoinbaseWallet) {
+        return 'Coinbase Wallet';
+      }
+      return 'Web3 Wallet';
+    }
+    return 'Unknown';
   };
 
   const handleBuyTokens = (e: React.FormEvent) => {
@@ -152,17 +297,41 @@ const Wallet = () => {
                 Connect Your Polygon Wallet
               </h2>
               <p className="text-gray-300 mb-8">
-                Connect your MetaMask or compatible wallet to start supporting student innovations with $CSHARE tokens.
+                Connect your MetaMask, Trust Wallet, or compatible wallet to start supporting student innovations with $CSHARE tokens.
               </p>
+              
+              {connectionError && (
+                <div className="mb-6 p-4 bg-red-500/20 border border-red-500/40 rounded-lg">
+                  <div className="flex items-center justify-center mb-2">
+                    <ExclamationCircleIcon className="w-5 h-5 text-red-400 mr-2" />
+                    <span className="text-red-400 font-medium">Connection Error</span>
+                  </div>
+                  <p className="text-red-300 text-sm">{connectionError}</p>
+                </div>
+              )}
+
               <button
                 onClick={handleConnectWallet}
-                className="w-full bg-gradient-to-r from-purple-500 to-blue-500 text-white py-4 rounded-lg font-semibold hover:from-purple-600 hover:to-blue-600 transition-all duration-300 mb-4"
+                disabled={isConnecting}
+                className="w-full bg-gradient-to-r from-purple-500 to-blue-500 text-white py-4 rounded-lg font-semibold hover:from-purple-600 hover:to-blue-600 transition-all duration-300 mb-4 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
               >
-                Connect MetaMask
+                {isConnecting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                    Connecting...
+                  </>
+                ) : (
+                  <>
+                    <WalletIcon className="w-5 h-5 mr-2" />
+                    Connect Wallet
+                  </>
+                )}
               </button>
-              <p className="text-gray-400 text-sm">
-                Make sure you're on the Polygon network
-              </p>
+              
+              <div className="text-gray-400 text-sm space-y-2">
+                <p>Supported wallets: MetaMask, Trust Wallet</p>
+                <p>Make sure you're on a supported Polygon network</p>
+              </div>
             </GlassCard>
           </div>
         ) : (
@@ -211,16 +380,40 @@ const Wallet = () => {
 
               <GlassCard className="p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-gray-400 font-medium">Network</h3>
+                  <h3 className="text-gray-400 font-medium">Wallet</h3>
                   <div className="w-3 h-3 bg-green-400 rounded-full"></div>
                 </div>
-                <p className="text-xl font-bold text-white mb-2">
-                  Polygon
+                <p className="text-lg font-bold text-white mb-2">
+                  {detectWalletType()}
                 </p>
                 <p className="text-gray-400 text-sm">
-                  Connected
+                  {formatAddress(walletAddress)}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {currentNetwork ? getNetworkName(currentNetwork) : 'Unknown Network'}
                 </p>
               </GlassCard>
+            </div>
+
+            {/* Wallet Info and Disconnect */}
+            <div className="flex justify-between items-center mb-6">
+              <div className="flex items-center space-x-4">
+                <div className="w-3 h-3 bg-green-400 rounded-full"></div>
+                <div>
+                  <p className="text-white font-medium">
+                    Connected to {detectWalletType()}
+                  </p>
+                  <p className="text-gray-400 text-sm">
+                    {formatAddress(walletAddress)} • {currentNetwork ? getNetworkName(currentNetwork) : 'Unknown Network'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleDisconnectWallet}
+                className="px-4 py-2 border border-red-500/40 text-red-300 rounded-lg font-medium hover:bg-red-500/20 transition-all duration-300"
+              >
+                Disconnect
+              </button>
             </div>
 
             {/* Actions */}
@@ -533,6 +726,69 @@ const Wallet = () => {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Network Selection Modal */}
+        {showNetworkModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-gray-900/95 backdrop-blur-lg border border-orange-500/20 rounded-2xl p-8 max-w-md w-full"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-white">Switch Network</h2>
+                <button
+                  onClick={() => setShowNetworkModal(false)}
+                  className="text-gray-400 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="mb-6">
+                <div className="flex items-center justify-center mb-4">
+                  <ExclamationTriangleIcon className="w-12 h-12 text-orange-400" />
+                </div>
+                <p className="text-gray-300 text-center mb-4">
+                  You're connected to an unsupported network. Please switch to a supported Polygon network to continue.
+                </p>
+                {currentNetwork && (
+                  <p className="text-gray-400 text-center text-sm">
+                    Current network: {getNetworkName(currentNetwork)}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-4">
+                <button
+                  onClick={() => handleSwitchNetwork('mainnet')}
+                  className="w-full bg-gradient-to-r from-purple-500 to-blue-500 text-white py-4 rounded-lg font-semibold hover:from-purple-600 hover:to-blue-600 transition-all duration-300 flex items-center justify-center"
+                >
+                  <div className="w-3 h-3 bg-green-400 rounded-full mr-3"></div>
+                  Switch to Polygon zkEVM Mainnet
+                </button>
+                
+                <button
+                  onClick={() => handleSwitchNetwork('testnet')}
+                  className="w-full border border-purple-500/40 text-purple-300 py-4 rounded-lg font-semibold hover:bg-purple-500/20 transition-all duration-300 flex items-center justify-center"
+                >
+                  <div className="w-3 h-3 bg-yellow-400 rounded-full mr-3"></div>
+                  Switch to Polygon zkEVM Testnet
+                </button>
+              </div>
+
+              <div className="mt-6 text-center">
+                <p className="text-gray-400 text-sm">
+                  Don't have these networks? They will be added to your wallet automatically.
+                </p>
+              </div>
             </motion.div>
           </motion.div>
         )}

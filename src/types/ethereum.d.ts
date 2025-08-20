@@ -3,6 +3,9 @@ interface EthereumProvider {
   on(event: string, callback: (...args: any[]) => void): void;
   removeAllListeners(event: string): void;
   isMetaMask?: boolean;
+  isTrust?: boolean;
+  isCoinbaseWallet?: boolean;
+  isWalletConnect?: boolean;
 }
 
 declare global {
